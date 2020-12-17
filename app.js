@@ -6,13 +6,11 @@ const AWS = require('aws-sdk');
 const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
 const dotenv = require('dotenv');
-const nodemailer = require('nodemailer')
+
 const fs = require('fs');
 const File = require("./model/image")
 const User = require('./model/user')
 const ourWorks = require('./routes/ourWorks')
-// const contactModel = require("./model/contact")
-// const story = require("./model/story")
 const contactModel = require("./model/contact")
 const story = require("./model/story")
 const PORT = 4444;
@@ -20,7 +18,8 @@ dotenv.config();
 const uploadRoute = require('./routes/fileUpload')
 const addStory = require('./routes/addStory');
 const { getMaxListeners } = require('./model/image');
-const path = require('path')
+const path = require('path');
+
 //Middlewares
 app.use(cors());
 app.use(bodyParser.json());
@@ -30,49 +29,15 @@ app.use('/upload', uploadRoute) //file upload route
 app.use('/addstory', addStory)
 app.use('/ourworks', ourWorks)
 
-
+AWS.config.loadFromPath(__dirname + '/config.json');
 AWS.config.update({region: 'us-west-2'});
 
-
+const email="acw.dnsp@gmail.com";
+var ses = new AWS.SES();
 //connect to DB
 mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true }, () => console.log("Database is connected!"));
 app.use(express.static("client/build"));
-//Node mailer section
-// let transporter = nodemailer.createTransport({
-//     host:"mmtp.iitk.ac.in",
-//     port:25,
-//     auth: {
-//         user: "sdevang@iitk.ac.in",
-//         pass: process.env.PASSWORD 
-//     }
-//     }
-// );
-var transporter = nodemailer.createTransport({
-    host: "smtp.mailtrap.io",
-    port: 2525,
-    auth: {
-      user: process.env.USER,
-      pass: process.env.PASS
-    }
-  });
-let from = `Rotaract Club MNNIT Allahabad <sdevang@iitk.ac.in>`
 
-// Join us section
-// app.post("/contact",async(req,res)=>{
-// //    console.log(req.data)
-//    const contact = new contactModel({
-//       name:req.body.name,
-//       email:req.body.email,
-//       description:req.body.description,
-//       source:req.body.source
-//   })
-//   try{
-//       const savedUser = await contact.save();
-//       res.status(200)
-//   }catch(err) {
-//       res.status(400).send(err);
-//   }
-// })
 // Share Rotary story section
 app.post("/rotary_story",async(req,res)=>{
    const newalter = new story({
@@ -81,49 +46,37 @@ app.post("/rotary_story",async(req,res)=>{
       title:req.body.title,
       story:req.body.story
   })
-// node mailer transporter
-    let mailOptions = {
-        from: from, 
-        to: 'namanpatel453@gmail.com, devang.iitk@gmail.com',
-        subject: `New Rotary Story`,
-        text: `
-        
-            `,
-        html:`
-        <p>Someone just shared his/her Rotary story with you</p>
-            <br/>
-           Name: ${req.body.name} <br/>
-           Email: ${req.body.email} <br/>
-           Title: ${req.body.title} <br/>
-           Story: ${req.body.story}
-        `    
+    // Aws ses send mail section
+    var ses_mail = "From: 'Rotaract Club' <" + email + ">\n";
+    ses_mail = ses_mail + "To: " + email + "\n";
+    ses_mail = ses_mail + "Subject: A Rotary Story just popped up\n";
+    ses_mail = ses_mail + "MIME-Version: 1.0\n";
+    ses_mail = ses_mail + "Content-Type: multipart/mixed; boundary=\"NextPart\"\n\n";
+    ses_mail = ses_mail + "--NextPart\n";
+    ses_mail = ses_mail + "Content-Type: text/html; charset=us-ascii\n\n";
+    ses_mail = ses_mail + "This is should be a html text.\n\n";
+    ses_mail = ses_mail + "--NextPart\n";
+    ses_mail = ses_mail + "Content-Type: text/plain;\n";
+    ses_mail = ses_mail + "Content-Disposition: attachment; filename=\"Story.txt\"\n\n";
+    ses_mail = ses_mail + "Name:"+req.body.name+"\n"+
+    "Email:"+req.body.email+"\n"+
+    "Title:"+req.body.title+"\n"+
+    "Story:"+req.body.story+"\n" + "\n\n";
+    ses_mail = ses_mail + "--NextPart--";
+    var params = {
+        RawMessage: { Data: new Buffer.from(ses_mail) },
+        Destinations: [ email ],
+        Source: "'Rotaract Club' <" + email + ">'"
     };
-    transporter.sendMail(mailOptions, (err, data) => {
-    if (err) {
-        return console.log('Error occurs');
-    }
-        return console.log('Email sent!!!');
+    ses.sendRawEmail(params, function(err, data) {
+        if(err) {
+            res.send(err);
+        } 
+        else {
+            res.send(data);
+        }           
     });
-  try{
-      const savedUser = await newalter.save();
-      res.send(savedUser);
-  }catch(err) {
-      res.status(400).send(err);
-  }
 })
-
-
-
-// app.use(express.static("client/build"));
-// app.get('*', (req,res) =>{
-//     res.sendFile(path.join(__dirname + '/client/build/index.html'));
-// });
-// app.use(function(req, res, next) {
-//     res.header("Access-Control-Allow-Origin", "*");
-//     res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-//     next();
-//   });
-  
 
 app.use(express.json());
 
